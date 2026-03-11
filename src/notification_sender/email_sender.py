@@ -135,6 +135,8 @@ class EmailSender:
             
             # 将 Markdown 转换为简单 HTML
             html_content = markdown_to_html_document(content)
+            content = content.encode('utf-8', errors='ignore').decode('utf-8')
+            html_content = html_content.encode('utf-8', errors='ignore').decode('utf-8')
             
             # 构建邮件
             msg = MIMEMultipart('alternative')
