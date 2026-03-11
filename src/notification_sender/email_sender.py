@@ -176,7 +176,7 @@ class EmailSender:
                 server.starttls()
             
             server.login(sender, password)
-            server.send_message(msg)
+            server.sendmail(sender, receivers, msg.as_bytes())   # 改这里
             server.quit()
             
             logger.info(f"邮件发送成功，收件人: {receivers}")
