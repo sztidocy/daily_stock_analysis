@@ -178,9 +178,10 @@ class EmailSender:
             server.login(sender, password)
 try:
     server.sendmail(sender, receivers, msg.as_bytes())
-except Exception as e:
-    logger.warning(f"as_bytes() 失败: {e}，fallback 到 encode('utf-8')")
-    server.sendmail(sender, receivers, msg.as_string().encode('utf-8'))
+            server.send_message(msg)
+            server.quit()
+            logger.info(f"邮件发送成功，收件人: {receivers}")
+            return True
 
          server.quit()
             
