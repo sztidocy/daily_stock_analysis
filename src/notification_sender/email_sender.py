@@ -176,17 +176,13 @@ class EmailSender:
                 server.starttls()
             
             server.login(sender, password)
-try:
-    server.sendmail(sender, receivers, msg.as_bytes())
-            server.send_message(msg)
+                server.send_message(msg)
             server.quit()
-            logger.info(f"邮件发送成功，收件人: {receivers}")
-            return True
 
-         server.quit()
-            
             logger.info(f"邮件发送成功，收件人: {receivers}")
             return True
+            
+
             
         except smtplib.SMTPAuthenticationError:
             logger.error("邮件发送失败：认证错误，请检查邮箱和授权码是否正确")
