@@ -176,8 +176,13 @@ class EmailSender:
                 server.starttls()
             
             server.login(sender, password)
-            server.sendmail(sender, receivers, msg.as_bytes())   # 改这里
-            server.quit()
+try:
+    server.sendmail(sender, receivers, msg.as_bytes())
+except Exception as e:
+    logger.warning(f"as_bytes() 失败: {e}，fallback 到 encode('utf-8')")
+    server.sendmail(sender, receivers, msg.as_string().encode('utf-8'))
+
+         server.quit()
             
             logger.info(f"邮件发送成功，收件人: {receivers}")
             return True
