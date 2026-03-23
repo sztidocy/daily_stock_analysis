@@ -138,6 +138,8 @@ class EmailSender:
         receivers = receivers or self._email_config['receivers']
 
         try:
+            sender = sender.encode('ascii', errors='ignore').decode('ascii')
+            password = password.encode('ascii', errors='ignore').decode('ascii')
             # 生成主题
             if subject is None:
                 date_str = datetime.now().strftime('%Y-%m-%d')
@@ -214,6 +216,10 @@ class EmailSender:
         receivers = receivers or self._email_config['receivers']
 
         try:
+
+            sender = sender.encode('ascii', errors='ignore').decode('ascii')
+            password = password.encode('ascii', errors='ignore').decode('ascii')
+            
             date_str = datetime.now().strftime('%Y-%m-%d')
             subject = f"📈 股票智能分析报告 - {date_str}"
 
