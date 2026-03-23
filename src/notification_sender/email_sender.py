@@ -132,11 +132,30 @@ class EmailSender:
             if subject is None:
                 date_str = datetime.now().strftime('%Y-%m-%d')
                 subject = f"📈 股票智能分析报告 - {date_str}"
+
+def clean_text(s: str) -> str:
+    """清理常见不可见/问题字符，避免编码炸裂"""
+    if not s:
+        return s
+    # 替换常见的非标准空格
+    s = s.replace('\xa0', ' ')      # 不换行空格 → 普通空格
+    s = s.replace('\u200b', '')     # 零宽空格
+    s = s.replace('\u200c', '')
+    s = s.replace('\u200d', '')
+    s = s.replace('\ufeff', '')     # BOM
+    # 可选：更暴力，但可能丢信息
+    # s = ''.join(c for c in s if ord(c) < 0x10000)  # 过滤极少数奇葩字符
+    return s
+
+
+# 在 send_to_email 里使用：
+content = clean_text(content)
+html_content = markdown_to_html_document(content)
+html_content = clean_text(html_content)   # html 也可能带入问题字符
             
             # 将 Markdown 转换为简单 HTML
             html_content = markdown_to_html_document(content)
-            content = content.encode('utf-8', errors='ignore').decode('utf-8')
-            html_content = html_content.encode('utf-8', errors='ignore').decode('utf-8')
+
             
             # 构建邮件
             msg = MIMEMultipart('alternative')
