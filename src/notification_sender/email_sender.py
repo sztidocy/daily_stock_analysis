@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 Email 发送提醒服务
-
 职责：
 1. 通过 SMTP 发送 Email 消息
 """
@@ -18,9 +17,7 @@ import smtplib
 from src.config import Config
 from src.formatters import markdown_to_html_document
 
-
 logger = logging.getLogger(__name__)
-
 
 # SMTP 服务器配置（自动识别）
 SMTP_CONFIGS = {
@@ -47,12 +44,24 @@ SMTP_CONFIGS = {
 }
 
 
+def clean_text(s: str) -> str:
+    """清理常见不可见/问题字符，避免编码炸裂"""
+    if not s:
+        return s
+    # 替换常见的非标准空格和零宽字符
+    s = s.replace('\xa0', ' ')      # 不换行空格 → 普通空格
+    s = s.replace('\u200b', '')     # 零宽空格
+    s = s.replace('\u200c', '')
+    s = s.replace('\u200d', '')
+    s = s.replace('\ufeff', '')     # BOM
+    s = s.replace('\r\n', '\n')     # 统一换行符（可选）
+    return s
+
+
 class EmailSender:
-    
     def __init__(self, config: Config):
         """
         初始化 Email 配置
-
         Args:
             config: 配置对象
         """
@@ -63,11 +72,11 @@ class EmailSender:
             'receivers': config.email_receivers or ([config.email_sender] if config.email_sender else []),
         }
         self._stock_email_groups = getattr(config, 'stock_email_groups', None) or []
-        
+
     def _is_email_configured(self) -> bool:
         """检查邮件配置是否完整（只需邮箱和授权码）"""
         return bool(self._email_config['sender'] and self._email_config['password'])
-    
+
     def get_receivers_for_stocks(self, stock_codes: List[str]) -> List[str]:
         """
         Look up email receivers for given stock codes based on stock_email_groups.
@@ -75,6 +84,7 @@ class EmailSender:
         """
         if not stock_codes or not self._stock_email_groups:
             return self._email_config['receivers']
+
         seen: set = set()
         result: List[str] = []
         for stocks, emails in self._stock_email_groups:
@@ -104,75 +114,58 @@ class EmailSender:
                 seen.add(e)
                 result.append(e)
         return result
-    
+
     def send_to_email(
         self, content: str, subject: Optional[str] = None, receivers: Optional[List[str]] = None
     ) -> bool:
         """
         通过 SMTP 发送邮件（自动识别 SMTP 服务器）
-        
+
         Args:
             content: 邮件内容（支持 Markdown，会转换为 HTML）
             subject: 邮件主题（可选，默认自动生成）
             receivers: 收件人列表（可选，默认使用配置的 receivers）
-            
+
         Returns:
             是否发送成功
         """
         if not self._is_email_configured():
             logger.warning("邮件配置不完整，跳过推送")
             return False
-        
+
         sender = self._email_config['sender']
         password = self._email_config['password']
         receivers = receivers or self._email_config['receivers']
-        
+
         try:
             # 生成主题
             if subject is None:
                 date_str = datetime.now().strftime('%Y-%m-%d')
                 subject = f"📈 股票智能分析报告 - {date_str}"
 
-def clean_text(s: str) -> str:
-    """清理常见不可见/问题字符，避免编码炸裂"""
-    if not s:
-        return s
-    # 替换常见的非标准空格
-    s = s.replace('\xa0', ' ')      # 不换行空格 → 普通空格
-    s = s.replace('\u200b', '')     # 零宽空格
-    s = s.replace('\u200c', '')
-    s = s.replace('\u200d', '')
-    s = s.replace('\ufeff', '')     # BOM
-    # 可选：更暴力，但可能丢信息
-    # s = ''.join(c for c in s if ord(c) < 0x10000)  # 过滤极少数奇葩字符
-    return s
-
-
-# 在 send_to_email 里使用：
-content = clean_text(content)
-html_content = markdown_to_html_document(content)
-html_content = clean_text(html_content)   # html 也可能带入问题字符
-            
-            # 将 Markdown 转换为简单 HTML
+            # 清理文本（防止 \xa0 等导致 ascii 编码错误）
+            content = clean_text(content)
             html_content = markdown_to_html_document(content)
+            html_content = clean_text(html_content)
 
-            
             # 构建邮件
             msg = MIMEMultipart('alternative')
             msg['Subject'] = Header(subject, 'utf-8')
-            msg['From'] = formataddr((self._email_config.get('sender_name', '股票分析助手'), sender))
+            msg['From'] = formataddr(
+                (self._email_config.get('sender_name', '股票分析助手'), sender)
+            )
             msg['To'] = ', '.join(receivers)
-            
+
             # 添加纯文本和 HTML 两个版本
             text_part = MIMEText(content, 'plain', 'utf-8')
             html_part = MIMEText(html_content, 'html', 'utf-8')
             msg.attach(text_part)
             msg.attach(html_part)
-            
+
             # 自动识别 SMTP 配置
             domain = sender.split('@')[-1].lower()
             smtp_config = SMTP_CONFIGS.get(domain)
-            
+
             if smtp_config:
                 smtp_server = smtp_config['server']
                 smtp_port = smtp_config['port']
@@ -184,25 +177,21 @@ html_content = clean_text(html_content)   # html 也可能带入问题字符
                 smtp_port = 465
                 use_ssl = True
                 logger.warning(f"未知邮箱类型 {domain}，尝试通用配置: {smtp_server}:{smtp_port}")
-            
+
             # 根据配置选择连接方式
             if use_ssl:
-                # SSL 连接（端口 465）
                 server = smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=30)
             else:
-                # TLS 连接（端口 587）
                 server = smtplib.SMTP(smtp_server, smtp_port, timeout=30)
                 server.starttls()
-            
+
             server.login(sender, password)
             server.send_message(msg)
             server.quit()
 
             logger.info(f"邮件发送成功，收件人: {receivers}")
             return True
-            
 
-            
         except smtplib.SMTPAuthenticationError:
             logger.error("邮件发送失败：认证错误，请检查邮箱和授权码是否正确")
             return False
@@ -210,21 +199,24 @@ html_content = clean_text(html_content)   # html 也可能带入问题字符
             logger.error(f"邮件发送失败：无法连接 SMTP 服务器 - {e}")
             return False
         except Exception as e:
-            logger.error(f"发送邮件失败: {e}")
+            logger.error(f"发送邮件失败: {e}", exc_info=True)
             return False
 
     def _send_email_with_inline_image(
         self, image_bytes: bytes, receivers: Optional[List[str]] = None
     ) -> bool:
-        """Send email with inline image attachment (Issue #289)."""
+        """Send email with inline image attachment"""
         if not self._is_email_configured():
             return False
+
         sender = self._email_config['sender']
         password = self._email_config['password']
         receivers = receivers or self._email_config['receivers']
+
         try:
             date_str = datetime.now().strftime('%Y-%m-%d')
             subject = f"📈 股票智能分析报告 - {date_str}"
+
             msg = MIMEMultipart('related')
             msg['Subject'] = Header(subject, 'utf-8')
             msg['From'] = formataddr(
@@ -234,9 +226,10 @@ html_content = clean_text(html_content)   # html 也可能带入问题字符
 
             alt = MIMEMultipart('alternative')
             alt.attach(MIMEText('报告已生成，详见下方图片。', 'plain', 'utf-8'))
+
             html_body = (
                 '<p>报告已生成，详见下方图片（点击可查看大图）：</p>'
-                '<p><img src="cid:report-image" alt="股票分析报告" style="max-width:100%%;" /></p>'
+                '<p><img src="cid:report-image" alt="股票分析报告" style="max-width:100%;" /></p>'
             )
             alt.attach(MIMEText(html_body, 'html', 'utf-8'))
             msg.attach(alt)
@@ -246,6 +239,7 @@ html_content = clean_text(html_content)   # html 也可能带入问题字符
             img_part.add_header('Content-ID', '<report-image>')
             msg.attach(img_part)
 
+            # SMTP 配置（与 send_to_email 类似）
             domain = sender.split('@')[-1].lower()
             smtp_config = SMTP_CONFIGS.get(domain)
             if smtp_config:
@@ -260,11 +254,14 @@ html_content = clean_text(html_content)   # html 也可能带入问题字符
             else:
                 server = smtplib.SMTP(smtp_server, smtp_port, timeout=30)
                 server.starttls()
+
             server.login(sender, password)
             server.send_message(msg)
             server.quit()
+
             logger.info("邮件（内联图片）发送成功，收件人: %s", receivers)
             return True
+
         except Exception as e:
-            logger.error("邮件（内联图片）发送失败: %s", e)
+            logger.error("邮件（内联图片）发送失败: %s", e, exc_info=True)
             return False
